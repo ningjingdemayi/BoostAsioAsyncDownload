@@ -23,10 +23,14 @@ class client
 {
 public:
 	client(boost::asio::io_service& io_service,
-		const std::string& server, const std::string& path , std::string & _contain)
-		: resolver_(io_service),
+		const std::string& server, const std::string& path , std::string & _contain , long timer_seconds = 3)
+		:
+		ioserv(io_service),
+		resolver_(io_service),
 		socket_(io_service),
-		contain(_contain)
+		contain(_contain),
+		timer_(io_service)
+
 	{
 		// Form the request. We specify the "Connection: close" header so that the
 		// server will close the socket after transmitting the response. This will
@@ -44,6 +48,11 @@ public:
 			boost::bind(&client::handle_resolve, this,
 			boost::asio::placeholders::error,
 			boost::asio::placeholders::iterator));
+
+		/*===add for test timer =======*/
+		timer_.expires_from_now(boost::posix_time::seconds(timer_seconds));
+		timer_.async_wait(boost::bind(&client::close_socket, this));
+		/*===add for test timer =======*/
 	}
 
 private:
@@ -182,6 +191,7 @@ private:
 		else if(err == boost::asio::error::eof)
 		{
 			contain = oss.str();
+			ioserv.stop();
 		}
 	}
 
@@ -192,74 +202,22 @@ private:
 
 	std::ostringstream oss;
 	std::string &contain;
+
+
+
+	/*===add for test timer===*/
+	boost::asio::io_service & ioserv;
+	boost::asio::deadline_timer timer_;  
+	void close_socket()  
+	{  
+		std::cout << "é“¾æ¥è¶…æ—¶" << std::endl;
+		ioserv.stop();
+		socket_.close();  
+	}
+	/*==add for test timer=====*/
 };
 
-void toUtf_8( std::string & str );
-bool isUtf_8(const char* str,long length);
 
-void toUtf_8( std::string & str )
-{
-	if(isUtf_8(str.c_str() , str.size()))
-		return;
-	else
-	{
-		std::string s = str;
-		str = boost::locale::conv::between( s, "UTF-8", "gb2312" );
-	}
-}
-bool isUtf_8(const char* str,long length)
-{
-	int i;
-	int nBytes=0;//UFT8¿ÉÓÃ1-6¸ö×Ö½Ú±àÂë,ASCIIÓÃÒ»¸ö×Ö½Ú
-	unsigned char chr;
-	bool bAllAscii=true; //Èç¹ûÈ«²¿¶¼ÊÇASCII, ËµÃ÷²»ÊÇUTF-8
-	for(i=0;i<length;i++)
-	{
-		chr= *(str+i);
-		if( (chr&0x80) != 0 ) // ÅĞ¶ÏÊÇ·ñASCII±àÂë,Èç¹û²»ÊÇ,ËµÃ÷ÓĞ¿ÉÄÜÊÇUTF-8,ASCIIÓÃ7Î»±àÂë,µ«ÓÃÒ»¸ö×Ö½Ú´æ,×î¸ßÎ»±ê¼ÇÎª0,o0xxxxxxx
-			bAllAscii= false;
-		if(nBytes==0) //Èç¹û²»ÊÇASCIIÂë,Ó¦¸ÃÊÇ¶à×Ö½Ú·û,¼ÆËã×Ö½ÚÊı
-		{
-			if(chr>=0x80)
-			{
-				if(chr>=0xFC&&chr<=0xFD)
-					nBytes=6;
-				else if(chr>=0xF8)
-					nBytes=5;
-				else if(chr>=0xF0)
-					nBytes=4;
-				else if(chr>=0xE0)
-					nBytes=3;
-				else if(chr>=0xC0)
-					nBytes=2;
-				else
-				{
-					return false;
-				}
-				nBytes--;
-			}
-		}
-		else //¶à×Ö½Ú·ûµÄ·ÇÊ××Ö½Ú,Ó¦Îª 10xxxxxx
-		{
-			if( (chr&0xC0) != 0x80 )
-			{
-				return false;
-			}
-			nBytes--;
-		}
-	}
-
-	if( nBytes > 0 ) //Î¥·µ¹æÔò
-	{
-		return false;
-	}
-
-	if( bAllAscii ) //Èç¹ûÈ«²¿¶¼ÊÇASCII, ËµÃ÷²»ÊÇUTF-8
-	{
-		return false;
-	}
-	return true;
-}
 
 int main(int argc, char* argv[])
 {
@@ -292,18 +250,18 @@ int main(int argc, char* argv[])
 
 		if(url.size() == 0 || host.size() == 0)
 		{
-			url = "http://www.wubaiyi.com/";
-			host = "www.wubaiyi.com";
+			url = "http://www.baidu.com/";
+			host = "www.baidu.com";
 		}
 
 		std::string contain;
 		boost::asio::io_service io_service;
-		client c(io_service, host, url , contain);
+
+		//è¿™é‡Œä¼ å…¥ è¦ä¸‹è½½çš„ç½‘å€ åŸŸå åŒ…å«ä¸‹è½½å†…å®¹çš„ å­—ç¬¦ä¸² å’Œè¶…æ—¶æ—¶é—´
+		client c(io_service, host, url , contain , 10);
 
 		io_service.run();
 
-
-		toUtf_8(contain);
 
 		remove("output.txt");
 		std::ofstream fout("output.txt");
